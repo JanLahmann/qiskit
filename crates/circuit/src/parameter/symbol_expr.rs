@@ -370,6 +370,17 @@ pub enum BinaryOp {
     Pow,
 }
 
+/// Whether `(lv op X) +- (rv rop X)` has a shared-term simplification in `add_opt`/`sub_opt`.
+#[inline(always)]
+fn is_shared_term_pair(op: &BinaryOp, rop: &BinaryOp) -> bool {
+    matches!(
+        (op, rop),
+        (BinaryOp::Add | BinaryOp::Sub, BinaryOp::Add | BinaryOp::Sub)
+            | (BinaryOp::Mul, BinaryOp::Mul)
+            | (BinaryOp::Div, BinaryOp::Div)
+    )
+}
+
 // functions to make new expr for add
 #[inline(always)]
 fn _add(lhs: SymbolExpr, rhs: SymbolExpr) -> SymbolExpr {
@@ -1485,7 +1496,12 @@ impl SymbolExpr {
                         ) {
                             // shared terms (lv op X) + (rv op X)
                             (SymbolExpr::Value(lv), _, SymbolExpr::Value(rv), _) => {
-                                if l_rhs.expand().string_id() == r_rhs.expand().string_id() {
+                                // Check the operator pair first: comparing the shared terms
+                                // expands and stringifies both subtrees, which is expensive when
+                                // `self` is a long sum, and is wasted when no arm below applies.
+                                if is_shared_term_pair(op, rop)
+                                    && l_rhs.expand().string_id() == r_rhs.expand().string_id()
+                                {
                                     let t = SymbolExpr::Value(lv + rv);
                                     match (op, rop) {
                                         // (lv + X) + (rv + X)  ->  t + 2*X
@@ -1898,7 +1914,12 @@ impl SymbolExpr {
                         ) {
                             // shared terms: (lv op X) - (rv op X)
                             (SymbolExpr::Value(lv), _, SymbolExpr::Value(rv), _) => {
-                                if l_rhs.expand().string_id() == r_rhs.expand().string_id() {
+                                // Check the operator pair first: comparing the shared terms
+                                // expands and stringifies both subtrees, which is expensive when
+                                // `self` is a long sum, and is wasted when no arm below applies.
+                                if is_shared_term_pair(op, rop)
+                                    && l_rhs.expand().string_id() == r_rhs.expand().string_id()
+                                {
                                     let t = SymbolExpr::Value(lv - rv);
                                     match (op, rop) {
                                         // (lv + X) - (rv + X)  ->  X canceled -> (lv-rv) = t

@@ -1,0 +1,8 @@
+---
+fixes:
+  - |
+    Fixed a performance regression in :class:`.ParameterExpression` arithmetic, introduced
+    in Qiskit 2.6.0, where adding a scaled parameter such as ``2 * x`` to a sum that starts
+    with a numeric constant took twice as long with every term added. This made
+    :meth:`.QuantumCircuit.decompose` and other passes that accumulate a parametric
+    global phase appear to hang on circuits that mix numeric and parametric ``rz`` angles.

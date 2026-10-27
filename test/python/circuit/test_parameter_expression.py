@@ -19,6 +19,7 @@ import pickle
 import copy
 import functools
 import itertools
+import operator
 
 from test import combine
 from test import QiskitTestCase
@@ -1039,6 +1040,25 @@ class TestParameterExpression(QiskitTestCase):
             p += 3.14
 
         self.assertEqual(p, p.simplify())
+
+    @ddt.data(operator.add, operator.sub)
+    def test_alternating_constant_and_scaled_parameter(self, op):
+        """Test that alternately adding constants and scaled parameters stays fast.
+
+        This is the shape of a circuit's global phase after decomposing ``rz`` gates with
+        both numeric and parametric angles. Each ``c * p`` term used to expand and stringify
+        the whole running sum, which made every addition take twice as long as the last.
+        """
+        params = [Parameter(f"p{i}") for i in range(100)]
+        expression = 0.0
+        for i, param in enumerate(params):
+            expression = op(expression, 0.5 + i / 100)
+            expression = op(expression, -2 * param)
+
+        values = {param: (i + 1) / 7 for i, param in enumerate(params)}
+        sign = 1 if op is operator.add else -1
+        reference = sign * sum(0.5 + i / 100 - 2 * (i + 1) / 7 for i in range(100))
+        self.assertAlmostEqual(expression.bind(values).numeric(), reference)
 
     @ddt.data("__add__", "__sub__")
     def test_optimization_same_symbol(self, method):
