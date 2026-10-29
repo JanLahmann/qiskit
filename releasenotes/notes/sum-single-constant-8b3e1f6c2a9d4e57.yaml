@@ -1,0 +1,10 @@
+---
+fixes:
+  - |
+    Fixed :class:`.ParameterExpression` additions and subtractions becoming exponentially slow
+    when terms that contain a constant, such as ``2 * p`` after adding a number, or ``p + 0.5``,
+    are added to a long sum.  This made transpiling parameterized circuits slow, because the
+    circuit's global phase accumulates such terms.  Sums now keep all their constants in a single
+    leading term, so ``(1 + x) + (2 + y)`` becomes ``3 + x + y``.
+    See `#17306 <https://github.com/Qiskit/qiskit/issues/17306>`__ and
+    `#16520 <https://github.com/Qiskit/qiskit/issues/16520>`__.
