@@ -1302,6 +1302,88 @@ impl SymbolExpr {
         self.repr(true)
     }
 
+    /// Split off the constant term of a sum.
+    ///
+    /// Returns `(c, rest, negated)` such that `self == c + rest` (or `c - rest` if `negated`).
+    /// `rest` is `None` if `self` is a plain value.  Returns `None` if `self` has no constant
+    /// term at its top level.
+    fn split_constant(&self) -> Option<(Value, Option<&SymbolExpr>, bool)> {
+        match self {
+            SymbolExpr::Value(v) => Some((*v, None, false)),
+            SymbolExpr::Binary {
+                op: BinaryOp::Add,
+                lhs,
+                rhs,
+            } => match (lhs.as_ref(), rhs.as_ref()) {
+                (SymbolExpr::Value(v), r) => Some((*v, Some(r), false)),
+                (l, SymbolExpr::Value(v)) => Some((*v, Some(l), false)),
+                _ => None,
+            },
+            SymbolExpr::Binary {
+                op: BinaryOp::Sub,
+                lhs,
+                rhs,
+            } => match (lhs.as_ref(), rhs.as_ref()) {
+                (SymbolExpr::Value(v), r) => Some((*v, Some(r), true)),
+                (l, SymbolExpr::Value(v)) => Some((-v, Some(l), false)),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
+    /// Add or subtract two non-constant expressions of which at least one has a constant term,
+    /// keeping a single constant at the front of the result:
+    /// `(c1 + r1) +- (c2 + r2)  ->  (c1 +- c2) + (r1 +- r2)`.
+    ///
+    /// This keeps sums in a normal form in which the constant can be found in constant time, so
+    /// accumulating values into a long sum (such as a circuit's global phase) never has to search
+    /// or compare the rest of the sum.
+    fn add_constant_terms(
+        &self,
+        rhs: &SymbolExpr,
+        subtract: bool,
+        recursive: bool,
+    ) -> Option<SymbolExpr> {
+        if matches!(self, SymbolExpr::Value(_)) || matches!(rhs, SymbolExpr::Value(_)) {
+            return None;
+        }
+        let (l_split, r_split) = (self.split_constant(), rhs.split_constant());
+        if l_split.is_none() && r_split.is_none() {
+            return None;
+        }
+        let zero = Value::Int(0);
+        let (lc, lr, l_neg) = l_split.unwrap_or((zero, Some(self), false));
+        let (rc, rr, r_neg) = r_split.unwrap_or((zero, Some(rhs), false));
+        // Neither side is a plain value, so both have a non-constant rest.
+        let (lr, rr) = (lr?, rr?);
+        let c = if subtract { lc - rc } else { lc + rc };
+        // rest = (+-lr) + (+-rr), and `rest_neg` means the result is `c - rest`.
+        let add = |a: &SymbolExpr, b: &SymbolExpr| {
+            a.add_opt(b, recursive)
+                .unwrap_or_else(|| _add(a.clone(), b.clone()))
+        };
+        let sub = |a: &SymbolExpr, b: &SymbolExpr| {
+            a.sub_opt(b, recursive)
+                .unwrap_or_else(|| _sub(a.clone(), b.clone()))
+        };
+        let (rest, rest_neg) = match (l_neg, r_neg ^ subtract) {
+            (false, false) => (add(lr, rr), false),
+            (false, true) => (sub(lr, rr), false),
+            (true, false) => (sub(rr, lr), false),
+            (true, true) => (add(lr, rr), true),
+        };
+        Some(if rest.is_zero() {
+            SymbolExpr::Value(c)
+        } else if c.is_zero() {
+            if rest_neg { _neg(rest) } else { rest }
+        } else if rest_neg {
+            _sub(SymbolExpr::Value(c), rest)
+        } else {
+            _add(SymbolExpr::Value(c), rest)
+        })
+    }
+
     // Add with heuristic optimization
     fn add_opt(&self, rhs: &SymbolExpr, recursive: bool) -> Option<SymbolExpr> {
         if self.is_zero() {
@@ -1309,6 +1391,9 @@ impl SymbolExpr {
         } else if rhs.is_zero() {
             Some(self.clone())
         } else {
+            if let Some(e) = self.add_constant_terms(rhs, false, recursive) {
+                return Some(e);
+            }
             // if neg operation, call sub_opt
             if let SymbolExpr::Unary { op, expr } = rhs {
                 if let UnaryOp::Neg = op {
@@ -1715,6 +1800,9 @@ impl SymbolExpr {
         } else if rhs.is_zero() {
             Some(self.clone())
         } else {
+            if let Some(e) = self.add_constant_terms(rhs, true, recursive) {
+                return Some(e);
+            }
             // if neg, call add_opt
             if let SymbolExpr::Unary { op, expr } = rhs {
                 if let UnaryOp::Neg = op {

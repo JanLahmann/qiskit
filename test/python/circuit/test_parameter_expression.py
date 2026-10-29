@@ -1040,6 +1040,37 @@ class TestParameterExpression(QiskitTestCase):
 
         self.assertEqual(p, p.simplify())
 
+    @ddt.data(
+        lambda total, param: total + 0.1 + 2 * param,
+        lambda total, param: total + 0.1 - 2 * param,
+        lambda total, param: total + (param + 0.5),
+        lambda total, param: total - (2 * param + 1),
+    )
+    def test_sum_keeps_single_constant(self, step):
+        """Test that adding terms with constants to a long sum stays fast and correct.
+
+        The constants are collected into a single term, so the sum does not have to be searched or
+        compared on each addition.  Regression test of #17306.
+        """
+        params = [Parameter(f"p{i}") for i in range(200)]
+        expression = 0.3
+        reference = 0.3
+        for i, param in enumerate(params):
+            expression = step(expression, param)
+            reference = step(reference, (i + 1) / 7)
+
+        values = {param: (i + 1) / 7 for i, param in enumerate(params)}
+        self.assertAlmostEqual(expression.bind(values).numeric(), reference)
+
+    def test_sum_collects_constants(self):
+        """Test that constants inside a sum are collected into a single leading term."""
+        x = Parameter("x")
+        y = Parameter("y")
+        self.assertStructurallyEqual((1 + x) + (2 + y), 3 + (x + y))
+        self.assertStructurallyEqual((1 + x) - (2 + y), -1 + (x - y))
+        self.assertStructurallyEqual((1 - x) + (2 - y), 3 - (x + y))
+        self.assertEqual((1 + x) - (1 + x), 0)
+
     @ddt.data("__add__", "__sub__")
     def test_optimization_same_symbol(self, method):
         """Test optimizations with the same symbol."""
@@ -1091,12 +1122,18 @@ class TestParameterExpression(QiskitTestCase):
         x = Parameter("x")
         y = Parameter("y")
 
-        # These two expressions do not canonicalise to each other, as of the introduction of the
-        # test (2026-09-07), so they should not appear structurally equal.  If canonicalisation is
-        # introduced, the test case should be changed (after we've checked that `structurally_equal`
-        # is actually correct).
+        # Sums keep their constant as a single term at the front, so these two canonicalise to the
+        # same structure.
         left = x + y + 1
         right = 1 + y + x
+        self.assertEqual(left, right)
+        self.assertStructurallyEqual(left, right)
+
+        # Products are not canonicalised (as of 2026-10-29), so these two should not appear
+        # structurally equal.  If canonicalisation of products is introduced, the test case should
+        # be changed (after we've checked that `structurally_equal` is actually correct).
+        left = (x + 1) * y
+        right = y * (1 + x)
         self.assertEqual(left, right)
         self.assertNotStructurallyEqual(left, right)
 
