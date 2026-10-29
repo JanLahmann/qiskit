@@ -18,6 +18,7 @@ import unittest
 import pickle
 import copy
 import functools
+import random
 import itertools
 
 from test import combine
@@ -1061,6 +1062,42 @@ class TestParameterExpression(QiskitTestCase):
 
         values = {param: (i + 1) / 7 for i, param in enumerate(params)}
         self.assertAlmostEqual(expression.bind(values).numeric(), reference)
+
+    def test_sum_constants_random_expressions(self):
+        """Test that sums with constants stay correct and equal to themselves.
+
+        Builds expressions from a fixed sequence of random operations and checks the bound value
+        against the same operations on numbers, and that each expression equals itself and
+        cancels with itself.
+        """
+        rng = random.Random(2026)
+        params = [Parameter(f"p{i}") for i in range(4)]
+        values = {param: rng.uniform(0.3, 1.7) for param in params}
+        for _ in range(40):
+            pool = [(param, values[param]) for param in params]
+            for _ in range(30):
+                (a, a_val), (b, b_val) = rng.choice(pool), rng.choice(pool)
+                const = rng.choice([1, -2, 0.5, round(rng.uniform(-3, 3), 3)])
+                op = rng.choice(["add", "sub", "mul", "add_const", "sub_const", "const_sub"])
+                if op == "add":
+                    expr, val = a + b, a_val + b_val
+                elif op == "sub":
+                    expr, val = a - b, a_val - b_val
+                elif op == "mul":
+                    expr, val = a * const, a_val * const
+                elif op == "add_const":
+                    expr, val = a + const, a_val + const
+                elif op == "sub_const":
+                    expr, val = a - const, a_val - const
+                else:
+                    expr, val = const - a, const - a_val
+                if not isinstance(expr, ParameterExpression) or not expr.parameters:
+                    continue
+                pool.append((expr, val))
+                bound = expr.bind({param: values[param] for param in expr.parameters})
+                self.assertAlmostEqual(bound.numeric(), val)
+                self.assertEqual(expr, expr)
+                self.assertEqual(expr - expr, 0)
 
     def test_sum_collects_constants(self):
         """Test that constants inside a sum are collected into a single leading term."""

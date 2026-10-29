@@ -1358,6 +1358,23 @@ impl SymbolExpr {
         // Neither side is a plain value, so both have a non-constant rest.
         let (lr, rr) = (lr?, rr?);
         let c = if subtract { lc - rc } else { lc + rc };
+        // The shared-term rules this replaces, for two sums that both have a constant:
+        // `(c1 + X) + (c2 + X) -> c + 2*X` and `(c1 + X) - (c2 + X) -> c`.  They compared the
+        // expanded string forms of `X`, which costs a full expansion of a long sum on every
+        // addition; comparing the structure is cheap, since it stops at the first difference.
+        if l_split.is_some() && r_split.is_some() && lr.eq_exact(rr) {
+            if l_neg != (r_neg ^ subtract) {
+                return Some(SymbolExpr::Value(c));
+            }
+            let doubled = _mul(SymbolExpr::Value(Value::Int(2)), lr.clone());
+            return Some(if c.is_zero() {
+                if l_neg { _neg(doubled) } else { doubled }
+            } else if l_neg {
+                _sub(SymbolExpr::Value(c), doubled)
+            } else {
+                _add(SymbolExpr::Value(c), doubled)
+            });
+        }
         // rest = (+-lr) + (+-rr), and `rest_neg` means the result is `c - rest`.
         let add = |a: &SymbolExpr, b: &SymbolExpr| {
             a.add_opt(b, recursive)
