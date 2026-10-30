@@ -1248,6 +1248,16 @@ class TestTranspile(QiskitTestCase):
         for basis_gate in basis_gates:
             self.assertLessEqual(out.count_ops()[basis_gate], gate_counts[basis_gate])
 
+    @data(0, 1, 2, 3)
+    def test_cancelled_parameter_expression(self, optimization_level):
+        """Test transpiling a gate whose parameter expression cancelled to a constant."""
+        t = Parameter("t")
+        qc = QuantumCircuit(1)
+        qc.rz(t - t, 0)
+        out = transpile(qc, basis_gates=["cx", "u"], optimization_level=optimization_level)
+        bound = out.assign_parameters({param: 0.7 for param in out.parameters})
+        self.assertTrue(Operator(bound).equiv(QuantumCircuit(1)))
+
     @combine(
         optimization_level=[0, 1, 2, 3],
         basis_gates=[

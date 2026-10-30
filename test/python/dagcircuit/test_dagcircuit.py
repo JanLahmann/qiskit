@@ -39,6 +39,7 @@ from qiskit.circuit import (
     Gate,
     Instruction,
     Parameter,
+    ParameterExpression,
     Barrier,
     SwitchCaseOp,
     IfElseOp,
@@ -280,7 +281,11 @@ class TestDagRegisters(DAGTest):
         qc = QuantumCircuit(1)
         qc.rz(t - t, 0)
         dag = circuit_to_dag(qc)
-        self.assertEqual(copy.deepcopy(dag), dag)
+        copied = copy.deepcopy(dag)
+        self.assertEqual(copied, dag)
+        param = copied.op_nodes()[0].op.params[0]
+        self.assertIsInstance(param, ParameterExpression)
+        self.assertEqual(param.parameters, {t})
 
     def test_add_reg_duplicate(self):
         """add_qreg with the same register twice is not allowed."""
