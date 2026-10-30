@@ -270,6 +270,18 @@ class TestDagRegisters(DAGTest):
         self.assertEqual(output.find_bit(output.clbits[0]).index, 0)
         self.assertEqual(output.find_bit(output.clbits[0]).registers, [])
 
+    def test_deepcopy_cancelled_parameter_expression(self):
+        """Test deepcopy of a gate whose parameter expression cancelled to a constant.
+
+        ``t - t`` still lists ``t`` as a parameter, so it cannot be cast to a number; this used to
+        make the copy fail, and with it ``transpile`` at optimization level 3.
+        """
+        t = Parameter("t")
+        qc = QuantumCircuit(1)
+        qc.rz(t - t, 0)
+        dag = circuit_to_dag(qc)
+        self.assertEqual(copy.deepcopy(dag), dag)
+
     def test_add_reg_duplicate(self):
         """add_qreg with the same register twice is not allowed."""
         dag = DAGCircuit()

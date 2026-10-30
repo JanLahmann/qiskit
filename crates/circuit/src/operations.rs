@@ -257,10 +257,13 @@ impl Param {
             }
         } else if let Ok(py_expr) = PyParameterExpression::extract_coerce(ob) {
             if Some(true) == py_expr.inner.is_int() {
-                let Value::Int(int) = py_expr.inner.try_to_value(true)? else {
-                    return Ok(Param::Obj(ob.to_owned().unbind()));
-                };
-                Param::Int(int)
+                match py_expr.inner.try_to_value(true) {
+                    Ok(Value::Int(int)) => Param::Int(int),
+                    Ok(_) => return Ok(Param::Obj(ob.to_owned().unbind())),
+                    // The value is known, but the expression still has parameters whose terms
+                    // cancelled, such as `t - t`; keep it as an expression, like `from_expr` does.
+                    Err(_) => Param::ParameterExpression(Arc::new(py_expr.inner)),
+                }
             }
             // don't get confused by the `coerce` name here -- we promise to not coerce to
             // Param::Float. But if it's complex we need to store it as an Obj.

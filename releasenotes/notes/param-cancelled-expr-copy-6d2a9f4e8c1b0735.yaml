@@ -1,0 +1,7 @@
+---
+fixes:
+  - |
+    Fixed copying a :class:`.DAGCircuit` failing with ``TypeError: Parameter expression with
+    unbound parameters {} is not numeric`` when a gate parameter was an expression whose
+    parameters cancelled, such as ``t - t``.  This also made :func:`.transpile` fail at
+    optimization level 3 for such circuits.
