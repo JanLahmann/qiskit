@@ -1630,7 +1630,7 @@ def write_circuit(
     # The header stores the size of the global phase in 16 bits.
     if len(global_phase_data) > 0xFFFF:
         raise QpyError(
-            f"The global phase of the circuit takes {len(global_phase_data)} bytes,"
+            f"the global phase of the circuit takes {len(global_phase_data)} bytes,"
             f" but QPY can store at most {0xFFFF}"
         )
 
