@@ -19,7 +19,7 @@ use std::sync::{Arc, LazyLock, atomic};
 use std::{fmt, mem};
 use uuid::Uuid;
 
-use hashbrown::HashMap;
+use hashbrown::{HashMap, HashSet};
 use num_complex::Complex64;
 use pyo3::prelude::*;
 
@@ -1302,6 +1302,23 @@ impl SymbolExpr {
         self.repr(true)
     }
 
+    /// Compare the expanded forms of two expressions.
+    ///
+    /// Expanding is expensive, and the simplification rules that use this comparison call it on
+    /// every addition, so first rule out the common case of two expressions without a parameter
+    /// in common.  Such expressions can only be equal if both are constants in disguise, and
+    /// missing a simplification is always safe.
+    fn expanded_eq(&self, other: &SymbolExpr) -> bool {
+        let symbols: HashSet<&Symbol> = other.iter_symbols().collect();
+        let mut self_has_symbols = false;
+        let shares_symbol = self.iter_symbols().any(|s| {
+            self_has_symbols = true;
+            symbols.contains(s)
+        });
+        (shares_symbol || !self_has_symbols || symbols.is_empty())
+            && self.expand().string_id() == other.expand().string_id()
+    }
+
     /// Flatten the sums, differences, negations and constant scalings at the top of this
     /// expression into `constant + sum(coefficient * term)`.
     ///
@@ -1648,7 +1665,7 @@ impl SymbolExpr {
                         ) {
                             // shared terms (lv op X) + (rv op X)
                             (SymbolExpr::Value(lv), _, SymbolExpr::Value(rv), _) => {
-                                if l_rhs.expand().string_id() == r_rhs.expand().string_id() {
+                                if l_rhs.expanded_eq(r_rhs) {
                                     let t = SymbolExpr::Value(lv + rv);
                                     match (op, rop) {
                                         // (lv + X) + (rv + X)  ->  t + 2*X
@@ -1701,9 +1718,8 @@ impl SymbolExpr {
                             // only when X == +-Y, so add_opt collapses (rv*X + lv*Y) into a single term
                             (_, SymbolExpr::Value(lv), _, SymbolExpr::Value(rv)) => {
                                 if let (BinaryOp::Div, BinaryOp::Div) = (op, rop)
-                                    && (l_lhs.expand().string_id() == r_lhs.expand().string_id()
-                                        || _neg(l_lhs.as_ref().clone()).expand().string_id()
-                                            == r_lhs.expand().string_id())
+                                    && (l_lhs.expanded_eq(r_lhs)
+                                        || _neg(l_lhs.as_ref().clone()).expanded_eq(r_lhs))
                                 {
                                     let tl = _mul(SymbolExpr::Value(*rv), l_lhs.as_ref().clone());
                                     let tr = _mul(SymbolExpr::Value(*lv), r_lhs.as_ref().clone());
@@ -1718,9 +1734,8 @@ impl SymbolExpr {
                             // rewrite Div as Mul when X == +-Y so add_opt collapses them into a single term
                             (SymbolExpr::Value(_), _, _, SymbolExpr::Value(rv)) => {
                                 if let (BinaryOp::Mul, BinaryOp::Div) = (op, rop)
-                                    && (l_rhs.expand().string_id() == r_lhs.expand().string_id()
-                                        || _neg(l_rhs.as_ref().clone()).expand().string_id()
-                                            == r_lhs.expand().string_id())
+                                    && (l_rhs.expanded_eq(r_lhs)
+                                        || _neg(l_rhs.as_ref().clone()).expanded_eq(r_lhs))
                                 {
                                     let r = _mul(
                                         SymbolExpr::Value(Value::Real(1.0) / *rv),
@@ -1735,9 +1750,8 @@ impl SymbolExpr {
                             // rewrite Div as Mul when X == +-Y so add_opt collapses them into a single term
                             (_, SymbolExpr::Value(lv), SymbolExpr::Value(_), _) => {
                                 if let (BinaryOp::Div, BinaryOp::Mul) = (op, rop)
-                                    && (l_lhs.expand().string_id() == r_rhs.expand().string_id()
-                                        || _neg(l_lhs.as_ref().clone()).expand().string_id()
-                                            == r_rhs.expand().string_id())
+                                    && (l_lhs.expanded_eq(r_rhs)
+                                        || _neg(l_lhs.as_ref().clone()).expanded_eq(r_rhs))
                                 {
                                     let l = _mul(
                                         SymbolExpr::Value(Value::Real(1.0) / *lv),
@@ -1753,7 +1767,7 @@ impl SymbolExpr {
 
                         if op == rop
                             && let Some(e) = rhs.neg_opt()
-                            && self.expand().string_id() == e.expand().string_id()
+                            && self.expanded_eq(&e)
                         {
                             return Some(SymbolExpr::Value(Value::Int(0)));
                         }
@@ -2064,7 +2078,7 @@ impl SymbolExpr {
                         ) {
                             // shared terms: (lv op X) - (rv op X)
                             (SymbolExpr::Value(lv), _, SymbolExpr::Value(rv), _) => {
-                                if l_rhs.expand().string_id() == r_rhs.expand().string_id() {
+                                if l_rhs.expanded_eq(r_rhs) {
                                     let t = SymbolExpr::Value(lv - rv);
                                     match (op, rop) {
                                         // (lv + X) - (rv + X)  ->  X canceled -> (lv-rv) = t
@@ -2117,9 +2131,8 @@ impl SymbolExpr {
                             // only when X == +-Y, so sub_opt collapses rv*X - lv*Y into a single term
                             (_, SymbolExpr::Value(lv), _, SymbolExpr::Value(rv)) => {
                                 if let (BinaryOp::Div, BinaryOp::Div) = (op, rop)
-                                    && (l_lhs.expand().string_id() == r_lhs.expand().string_id()
-                                        || _neg(l_lhs.as_ref().clone()).expand().string_id()
-                                            == r_lhs.expand().string_id())
+                                    && (l_lhs.expanded_eq(r_lhs)
+                                        || _neg(l_lhs.as_ref().clone()).expanded_eq(r_lhs))
                                 {
                                     let tl = _mul(SymbolExpr::Value(*rv), l_lhs.as_ref().clone());
                                     let tr = _mul(SymbolExpr::Value(*lv), r_lhs.as_ref().clone());
@@ -2134,9 +2147,8 @@ impl SymbolExpr {
                             // rewrite the Div as a Mul only when X == +-Y so sub_opt collapses them
                             (SymbolExpr::Value(_), _, _, SymbolExpr::Value(rv)) => {
                                 if let (BinaryOp::Mul, BinaryOp::Div) = (op, rop)
-                                    && (l_rhs.expand().string_id() == r_lhs.expand().string_id()
-                                        || _neg(l_rhs.as_ref().clone()).expand().string_id()
-                                            == r_lhs.expand().string_id())
+                                    && (l_rhs.expanded_eq(r_lhs)
+                                        || _neg(l_rhs.as_ref().clone()).expanded_eq(r_lhs))
                                 {
                                     let r = _mul(
                                         SymbolExpr::Value(Value::Real(1.0) / *rv),
@@ -2151,9 +2163,8 @@ impl SymbolExpr {
                             // rewrite the Div as a Mul only when X == +-Y so sub_opt collapses them
                             (_, SymbolExpr::Value(lv), SymbolExpr::Value(_), _) => {
                                 if let (BinaryOp::Div, BinaryOp::Mul) = (op, rop)
-                                    && (l_lhs.expand().string_id() == r_rhs.expand().string_id()
-                                        || _neg(l_lhs.as_ref().clone()).expand().string_id()
-                                            == r_rhs.expand().string_id())
+                                    && (l_lhs.expanded_eq(r_rhs)
+                                        || _neg(l_lhs.as_ref().clone()).expanded_eq(r_rhs))
                                 {
                                     let l = _mul(
                                         SymbolExpr::Value(Value::Real(1.0) / *lv),
@@ -2167,7 +2178,7 @@ impl SymbolExpr {
                             (_, _, _, _) => (),
                         }
 
-                        if op == rop && self.expand().string_id() == rhs.expand().string_id() {
+                        if op == rop && self.expanded_eq(rhs) {
                             return Some(SymbolExpr::Value(Value::Int(0)));
                         }
                     } else if let SymbolExpr::Symbol(r) = rhs

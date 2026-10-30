@@ -1126,6 +1126,21 @@ class TestParameterExpression(QiskitTestCase):
         self.assertAlmostEqual(((x + 3) ** 41).bind({x: 0}).numeric(), 3.0**41)
         self.assertAlmostEqual((-(x - (-(2**63)))).bind({x: 0}).numeric(), -(2.0**63))
 
+    def test_scaled_sum_accumulation(self):
+        """Test that repeatedly scaling a sum and adding a scaled term stays fast.
+
+        Each addition compared the expanded forms of both sides, and expanding the nested scaled
+        sums did the same one level down, so the cost doubled with every term.
+        """
+        params = [Parameter(f"p{i}") for i in range(100)]
+        expression = 0
+        reference = 0
+        for i, param in enumerate(params):
+            expression = 0.9 * expression + 2 * param
+            reference = 0.9 * reference + 2 * (i + 1) / 7
+        values = {param: (i + 1) / 7 for i, param in enumerate(params)}
+        self.assertAlmostEqual(expression.bind(values).numeric(), reference)
+
     @ddt.data("__add__", "__sub__")
     def test_optimization_same_symbol(self, method):
         """Test optimizations with the same symbol."""
