@@ -1302,6 +1302,67 @@ impl SymbolExpr {
         self.repr(true)
     }
 
+    /// Flatten the sums, differences, negations and constant scalings at the top of this
+    /// expression into `constant + sum(coefficient * term)`.
+    ///
+    /// The terms are keyed by their string form, so equal keys always mean equal terms; terms
+    /// that are equal but written differently just stay apart.
+    fn linear_terms(&self) -> (Value, HashMap<String, Value>) {
+        let mut constant = Value::Int(0);
+        let mut terms: HashMap<String, Value> = HashMap::new();
+        let mut stack = vec![(self, Value::Int(1))];
+        while let Some((expr, coef)) = stack.pop() {
+            match expr {
+                SymbolExpr::Value(v) => constant = constant + coef * *v,
+                SymbolExpr::Unary {
+                    op: UnaryOp::Neg,
+                    expr,
+                } => stack.push((expr, -coef)),
+                SymbolExpr::Binary { op, lhs, rhs } => match (op, lhs.as_ref(), rhs.as_ref()) {
+                    (BinaryOp::Add, l, r) => {
+                        stack.push((l, coef));
+                        stack.push((r, coef));
+                    }
+                    (BinaryOp::Sub, l, r) => {
+                        stack.push((l, coef));
+                        stack.push((r, -coef));
+                    }
+                    (BinaryOp::Mul, SymbolExpr::Value(v), e)
+                    | (BinaryOp::Mul, e, SymbolExpr::Value(v)) => stack.push((e, coef * *v)),
+                    (BinaryOp::Div, e, SymbolExpr::Value(v)) if !v.is_zero() => {
+                        stack.push((e, coef / *v))
+                    }
+                    _ => {
+                        let entry = terms.entry(expr.string_id()).or_insert(Value::Int(0));
+                        *entry = *entry + coef;
+                    }
+                },
+                _ => {
+                    let entry = terms.entry(expr.string_id()).or_insert(Value::Int(0));
+                    *entry = *entry + coef;
+                }
+            }
+        }
+        (constant, terms)
+    }
+
+    /// Check whether two expressions are equal as linear combinations of their terms.
+    ///
+    /// This catches equal sums whose terms are grouped so differently that the heuristic
+    /// simplification in `sub_opt` does not cancel them, such as `x + 2*(y - x) + x` and `2*y`.
+    fn eq_linear(&self, other: &SymbolExpr) -> bool {
+        let (lc, mut terms) = self.linear_terms();
+        let (rc, rterms) = other.linear_terms();
+        if lc != rc {
+            return false;
+        }
+        for (key, coef) in rterms {
+            let entry = terms.entry(key).or_insert(Value::Int(0));
+            *entry = *entry - coef;
+        }
+        terms.values().all(|coef| coef.is_zero())
+    }
+
     /// Split off the constant term of a sum.
     ///
     /// Returns `(c, rest, negated)` such that `self == c + rest` (or `c - rest` if `negated`).
@@ -3349,33 +3410,36 @@ impl PartialEq for SymbolExpr {
             ) => {
                 let ex_lhs = self.expand();
                 let ex_rhs = rexpr.expand();
-                match ex_lhs.sub_opt(&ex_rhs, true) {
+                let diff_is_zero = match ex_lhs.sub_opt(&ex_rhs, true) {
                     Some(e) => e.is_zero(),
                     None => {
                         let t = &ex_lhs - &ex_rhs;
                         t.is_zero()
                     }
-                }
+                };
+                diff_is_zero || ex_lhs.eq_linear(&ex_rhs)
             }
             (SymbolExpr::Binary { .. }, _) => {
                 let ex_lhs = self.expand();
-                match ex_lhs.sub_opt(rexpr, true) {
+                let diff_is_zero = match ex_lhs.sub_opt(rexpr, true) {
                     Some(e) => e.is_zero(),
                     None => {
                         let t = &ex_lhs - rexpr;
                         t.is_zero()
                     }
-                }
+                };
+                diff_is_zero || ex_lhs.eq_linear(rexpr)
             }
             (_, SymbolExpr::Binary { .. }) => {
                 let ex_rhs = rexpr.expand();
-                match self.sub_opt(&ex_rhs, true) {
+                let diff_is_zero = match self.sub_opt(&ex_rhs, true) {
                     Some(e) => e.is_zero(),
                     None => {
                         let t = self - &ex_rhs;
                         t.is_zero()
                     }
-                }
+                };
+                diff_is_zero || self.eq_linear(&ex_rhs)
             }
             (_, _) => false,
         }

@@ -1108,6 +1108,16 @@ class TestParameterExpression(QiskitTestCase):
         self.assertStructurallyEqual((1 - x) + (2 - y), 3 - (x + y))
         self.assertEqual((1 + x) - (1 + x), 0)
 
+    def test_equal_sums_grouped_differently(self):
+        """Test that sums are equal however their terms are grouped."""
+        x = Parameter("x")
+        y = Parameter("y")
+        z = Parameter("z")
+        self.assertEqual(x + 2 * (y - x) + x, 2 * y)
+        self.assertEqual(1 + x + z.sin() - (x - z.sin()) + z.sin(), 1 + 3 * z.sin())
+        self.assertNotEqual(x + 2 * (y - x) + x, 2 * y + 1e-6)
+        self.assertNotEqual(x + 2 * (y - x) + x, 2 * x)
+
     @ddt.data("__add__", "__sub__")
     def test_optimization_same_symbol(self, method):
         """Test optimizations with the same symbol."""
