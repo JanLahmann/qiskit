@@ -2,5 +2,6 @@
 fixes:
   - |
     Fixed :class:`.ParameterExpression` arithmetic becoming exponentially slow when a sum was
-    repeatedly scaled by a constant and a scaled term added, as in ``e = 0.9 * e + 2 * p``.
-    Adding 50 such terms took minutes; it now takes milliseconds.
+    repeatedly scaled by a constant and a scaled term added that has no parameter in common with
+    the sum, as in ``e = 0.9 * e + 2 * p``.  Adding 50 such terms took minutes; it now takes
+    milliseconds.  Terms that share a parameter with the sum are still slow.
