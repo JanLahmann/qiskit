@@ -1,0 +1,7 @@
+---
+fixes:
+  - |
+    Fixed :class:`.ParameterExpression` equality reporting two equal sums as unequal when their
+    terms were grouped so differently that simplifying their difference did not cancel all terms,
+    such as ``x + 2*(y - x) + x`` and ``2*y``.  Equality now also compares both sides as linear
+    combinations of their terms.
