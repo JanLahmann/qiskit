@@ -1108,6 +1108,14 @@ class TestParameterExpression(QiskitTestCase):
         self.assertStructurallyEqual((1 - x) + (2 - y), 3 - (x + y))
         self.assertEqual((1 + x) - (1 + x), 0)
 
+    def test_integer_constants_do_not_overflow(self):
+        """Test that integer constants too large for 64 bits become floats instead of wrapping."""
+        x = Parameter("x")
+        self.assertAlmostEqual((x + 2**62 + 2**62).bind({x: 0}).numeric(), 2.0**63)
+        self.assertAlmostEqual(((x + 1) * 2**40 * 2**40).bind({x: 0}).numeric(), 2.0**80)
+        self.assertAlmostEqual(((x + 3) ** 41).bind({x: 0}).numeric(), 3.0**41)
+        self.assertAlmostEqual((-(x - (-(2**63)))).bind({x: 0}).numeric(), -(2.0**63))
+
     @ddt.data("__add__", "__sub__")
     def test_optimization_same_symbol(self, method):
         """Test optimizations with the same symbol."""
