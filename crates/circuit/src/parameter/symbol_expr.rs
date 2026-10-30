@@ -1646,33 +1646,12 @@ impl SymbolExpr {
                             r_lhs.as_ref(),
                             r_rhs.as_ref(),
                         ) {
-                            // shared terms (lv op X) + (rv op X)
+                            // shared terms (lv op X) + (rv op X); sums with a leading constant
+                            // are handled by `add_constant_terms`
                             (SymbolExpr::Value(lv), _, SymbolExpr::Value(rv), _) => {
                                 if l_rhs.expand().string_id() == r_rhs.expand().string_id() {
                                     let t = SymbolExpr::Value(lv + rv);
                                     match (op, rop) {
-                                        // (lv + X) + (rv + X)  ->  t + 2*X
-                                        // (lv - X) + (rv - X)  ->  t - 2*X
-                                        (BinaryOp::Add, BinaryOp::Add)
-                                        | (BinaryOp::Sub, BinaryOp::Sub) => {
-                                            let two_signed =
-                                                if matches!(op, BinaryOp::Add) { 2 } else { -2 };
-                                            let doubled_signed = _mul(
-                                                SymbolExpr::Value(Value::Int(two_signed)),
-                                                l_rhs.as_ref().clone(),
-                                            );
-                                            return Some(if t.is_zero() {
-                                                doubled_signed
-                                            } else {
-                                                _add(t, doubled_signed)
-                                            });
-                                        }
-                                        // (lv + X) + (rv - X)  ->  X canceled -> (lv+rv) = t
-                                        // (lv - X) + (rv + X)  ->  X canceled -> (lv+rv) = t
-                                        (BinaryOp::Sub, BinaryOp::Add)
-                                        | (BinaryOp::Add, BinaryOp::Sub) => {
-                                            return Some(t);
-                                        }
                                         // (lv * X) + (rv * X)  ->  (lv+rv) * X = t * X
                                         (BinaryOp::Mul, BinaryOp::Mul) => {
                                             if t.is_zero() {
@@ -2062,33 +2041,12 @@ impl SymbolExpr {
                             r_lhs.as_ref(),
                             r_rhs.as_ref(),
                         ) {
-                            // shared terms: (lv op X) - (rv op X)
+                            // shared terms (lv op X) - (rv op X); sums with a leading constant
+                            // are handled by `add_constant_terms`
                             (SymbolExpr::Value(lv), _, SymbolExpr::Value(rv), _) => {
                                 if l_rhs.expand().string_id() == r_rhs.expand().string_id() {
                                     let t = SymbolExpr::Value(lv - rv);
                                     match (op, rop) {
-                                        // (lv + X) - (rv + X)  ->  X canceled -> (lv-rv) = t
-                                        // (lv - X) - (rv - X)  ->  X canceled -> (lv-rv) = t
-                                        (BinaryOp::Add, BinaryOp::Add)
-                                        | (BinaryOp::Sub, BinaryOp::Sub) => {
-                                            return Some(t);
-                                        }
-                                        // (lv - X) - (rv + X)  ->  (lv-rv) - 2*X = t - 2*X
-                                        // (lv + X) - (rv - X)  ->  (lv-rv) + 2*X = t + 2*X
-                                        (BinaryOp::Sub, BinaryOp::Add)
-                                        | (BinaryOp::Add, BinaryOp::Sub) => {
-                                            let two_signed =
-                                                if matches!(op, BinaryOp::Sub) { -2 } else { 2 };
-                                            let doubled_signed = _mul(
-                                                SymbolExpr::Value(Value::Int(two_signed)),
-                                                l_rhs.as_ref().clone(),
-                                            );
-                                            return Some(if t.is_zero() {
-                                                doubled_signed
-                                            } else {
-                                                _add(t, doubled_signed)
-                                            });
-                                        }
                                         // (lv * X) - (rv * X)  ->  (lv-rv) * X = t * X
                                         (BinaryOp::Mul, BinaryOp::Mul) => {
                                             if t.is_zero() {

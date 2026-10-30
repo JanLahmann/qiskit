@@ -1041,11 +1041,11 @@ class TestParameterExpression(QiskitTestCase):
 
         self.assertEqual(p, p.simplify())
 
-    @ddt.data(
-        lambda total, param: total + 0.1 + 2 * param,
-        lambda total, param: total + 0.1 - 2 * param,
-        lambda total, param: total + (param + 0.5),
-        lambda total, param: total - (2 * param + 1),
+    @ddt.named_data(
+        ["add_const_add_scaled", lambda total, param: total + 0.1 + 2 * param],
+        ["add_const_sub_scaled", lambda total, param: total + 0.1 - 2 * param],
+        ["add_shifted", lambda total, param: total + (param + 0.5)],
+        ["sub_scaled_shifted", lambda total, param: total - (2 * param + 1)],
     )
     def test_sum_keeps_single_constant(self, step):
         """Test that adding terms with constants to a long sum stays fast and correct.
