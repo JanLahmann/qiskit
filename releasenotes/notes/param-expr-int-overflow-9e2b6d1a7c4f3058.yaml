@@ -4,4 +4,6 @@ fixes:
     Fixed integer constants in :class:`.ParameterExpression` silently wrapping around when the
     result of an operation on them did not fit in 64 bits, so that, for example,
     ``x + 2**62 + 2**62`` bound to ``x = 0`` gave a large negative number.  Such results are now
-    stored as floating-point numbers.
+    stored as floating-point numbers.  Dividing two integer constants is also exact now: before,
+    ``1 / x`` bound to ``x = 10**16`` gave ``0``, and exact quotients above ``2**53`` could be
+    off by one.

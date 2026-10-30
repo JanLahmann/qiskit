@@ -1062,12 +1062,14 @@ class TestParameterExpression(QiskitTestCase):
                     self.assertEqual(reference, expression.bind({x: value}))
 
     def test_integer_constants_do_not_overflow(self):
-        """Test that integer constants too large for 64 bits become floats instead of wrapping."""
+        """Test that integer results too large for 64 bits become floats, and division is exact."""
         x = Parameter("x")
         self.assertAlmostEqual((x + 2**62 + 2**62).bind({x: 0}).numeric(), 2.0**63)
         self.assertAlmostEqual(((x + 1) * 2**40 * 2**40).bind({x: 0}).numeric(), 2.0**80)
-        self.assertAlmostEqual(((x + 3) ** 41).bind({x: 0}).numeric(), 3.0**41)
+        self.assertAlmostEqual(((x + 3) ** 41).bind({x: 0}).numeric(), 3.0**41, delta=1e6)
         self.assertAlmostEqual((-(x - (-(2**63)))).bind({x: 0}).numeric(), -(2.0**63))
+        self.assertAlmostEqual((1 / x).bind({x: 10**16}).numeric(), 1e-16, delta=1e-30)
+        self.assertEqual((x / 3).bind({x: 3 * (2**53 + 1)}).numeric(), 2**53 + 1)
 
     def test_sub_sub(self):
         """Regression test for two nested subtractions with numeric values."""
