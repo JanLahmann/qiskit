@@ -3398,7 +3398,10 @@ impl Value {
     pub fn abs(&self) -> Value {
         match self {
             Value::Real(e) => Value::Real(e.abs()),
-            Value::Int(e) => Value::Int(e.abs()),
+            Value::Int(e) => match e.checked_abs() {
+                Some(a) => Value::Int(a),
+                None => Value::Real((*e as f64).abs()),
+            },
             Value::Complex(e) => Value::Real((e.re * e.re + e.im * e.im).sqrt()),
         }
     }
@@ -3564,7 +3567,9 @@ impl Value {
                     } else {
                         let t = (*e as f64).powf(*r);
                         let d = t.floor() - t;
-                        if (-SYMEXPR_EPSILON..SYMEXPR_EPSILON).contains(&d) {
+                        if (-SYMEXPR_EPSILON..SYMEXPR_EPSILON).contains(&d)
+                            && t.abs() < i64::MAX as f64
+                        {
                             Value::Int(t as i64)
                         } else {
                             Value::Real(t)
@@ -3575,7 +3580,10 @@ impl Value {
                     if *r < 0 {
                         Value::Real(*e as f64).pow(p)
                     } else {
-                        Value::Int(e.pow(*r as u32))
+                        match u32::try_from(*r).ok().and_then(|r| e.checked_pow(r)) {
+                            Some(v) => Value::Int(v),
+                            None => Value::Real((*e as f64).powf(*r as f64)),
+                        }
                     }
                 }
                 Value::Complex(_) => Value::Complex(Complex64::from(*e as f64)).pow(p),
@@ -3851,7 +3859,10 @@ impl Add for Value {
             },
             Value::Int(l) => match rhs {
                 Value::Real(r) => Value::Real(l as f64 + r),
-                Value::Int(r) => Value::Int(l + r),
+                Value::Int(r) => match l.checked_add(r) {
+                    Some(v) => Value::Int(v),
+                    None => Value::Real(l as f64 + r as f64),
+                },
                 Value::Complex(r) => Value::Complex(l as f64 + r),
             },
             Value::Complex(l) => match rhs {
@@ -3885,7 +3896,10 @@ impl Sub for Value {
             },
             Value::Int(l) => match rhs {
                 Value::Real(r) => Value::Real(l as f64 - r),
-                Value::Int(r) => Value::Int(l - r),
+                Value::Int(r) => match l.checked_sub(r) {
+                    Some(v) => Value::Int(v),
+                    None => Value::Real(l as f64 - r as f64),
+                },
                 Value::Complex(r) => Value::Complex(l as f64 - r),
             },
             Value::Complex(l) => match rhs {
@@ -3919,7 +3933,10 @@ impl Mul for Value {
             },
             Value::Int(l) => match rhs {
                 Value::Real(r) => Value::Real(l as f64 * r),
-                Value::Int(r) => Value::Int(l * r),
+                Value::Int(r) => match l.checked_mul(r) {
+                    Some(v) => Value::Int(v),
+                    None => Value::Real(l as f64 * r as f64),
+                },
                 Value::Complex(r) => Value::Complex(l as f64 * r),
             },
             Value::Complex(l) => match rhs {
@@ -3957,15 +3974,10 @@ impl Div for Value {
                 }
                 match rhs {
                     Value::Real(r) => Value::Real(l as f64 / r),
-                    Value::Int(r) => {
-                        let t = l as f64 / r as f64;
-                        let d = t.floor() - t;
-                        if (-SYMEXPR_EPSILON..SYMEXPR_EPSILON).contains(&d) {
-                            Value::Int(t as i64)
-                        } else {
-                            Value::Real(t)
-                        }
-                    }
+                    Value::Int(r) => match (l.checked_rem(r), l.checked_div(r)) {
+                        (Some(0), Some(q)) => Value::Int(q),
+                        _ => Value::Real(l as f64 / r as f64),
+                    },
                     Value::Complex(r) => Value::Complex(l as f64 / r),
                 }
             }
@@ -3994,7 +4006,10 @@ impl Neg for Value {
     fn neg(self) -> Value {
         match self {
             Value::Real(v) => Value::Real(-v),
-            Value::Int(v) => Value::Int(-v),
+            Value::Int(v) => match v.checked_neg() {
+                Some(n) => Value::Int(n),
+                None => Value::Real(-(v as f64)),
+            },
             Value::Complex(v) => Value::Complex(-v),
         }
     }
