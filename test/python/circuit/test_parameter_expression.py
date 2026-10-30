@@ -1061,6 +1061,21 @@ class TestParameterExpression(QiskitTestCase):
 
                     self.assertEqual(reference, expression.bind({x: value}))
 
+    def test_scaled_sum_accumulation(self):
+        """Test that repeatedly scaling a sum and adding a scaled term stays fast.
+
+        Each addition compared the expanded forms of both sides, and expanding the nested scaled
+        sums did the same one level down, so the cost doubled with every term.
+        """
+        params = [Parameter(f"p{i}") for i in range(100)]
+        expression = 0
+        reference = 0
+        for i, param in enumerate(params):
+            expression = 0.9 * expression + 2 * param
+            reference = 0.9 * reference + 2 * (i + 1) / 7
+        values = {param: (i + 1) / 7 for i, param in enumerate(params)}
+        self.assertAlmostEqual(expression.bind(values).numeric(), reference)
+
     def test_sub_sub(self):
         """Regression test for two nested subtractions with numeric values."""
         x, y = Parameter("x"), Parameter("y")
