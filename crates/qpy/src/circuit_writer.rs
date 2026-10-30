@@ -943,6 +943,14 @@ fn pack_circuit_header(
         qpy_data,
         ValueEndian::Big,
     )?;
+    // The header stores the size of the global phase in 16 bits.
+    if global_phase_data.data.len() > u16::MAX as usize {
+        return Err(QpyError::SerializationError(format!(
+            "the global phase of the circuit takes {} bytes, but QPY can store at most {}",
+            global_phase_data.data.len(),
+            u16::MAX
+        )));
+    }
     let qregs = pack_quantum_registers(qpy_data.circuit_data, qpy_data.version);
     let cregs = pack_classical_registers(qpy_data.circuit_data, qpy_data.version);
     let mut registers = qregs;

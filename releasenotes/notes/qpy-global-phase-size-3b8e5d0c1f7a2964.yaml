@@ -1,0 +1,6 @@
+---
+fixes:
+  - |
+    :func:`.qpy.dump` now raises a :class:`.QpyError` when a circuit's global phase serializes to
+    more than 65,535 bytes, such as a sum of about a thousand parameters.  Before, it truncated the
+    stored size and wrote a file that :func:`.qpy.load` could not read.

@@ -1627,6 +1627,12 @@ def write_circuit(
     num_instructions = len(circuit)
     circuit_name = circuit.name.encode(common.ENCODE)
     global_phase_type, global_phase_data = value.dumps_value(circuit.global_phase, version=version)
+    # The header stores the size of the global phase in 16 bits.
+    if len(global_phase_data) > 0xFFFF:
+        raise QpyError(
+            f"The global phase of the circuit takes {len(global_phase_data)} bytes,"
+            f" but QPY can store at most {0xFFFF}"
+        )
 
     with io.BytesIO() as reg_buf:
         num_qregs = _write_registers(reg_buf, circuit.qregs, circuit.qubits)

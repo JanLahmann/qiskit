@@ -17,7 +17,15 @@ import struct
 
 from ddt import ddt, data, idata
 
-from qiskit.circuit import QuantumCircuit, QuantumRegister, Qubit, Parameter, Gate, annotation
+from qiskit.circuit import (
+    QuantumCircuit,
+    QuantumRegister,
+    Qubit,
+    Parameter,
+    ParameterVector,
+    Gate,
+    annotation,
+)
 from qiskit.circuit.random import random_circuit
 from qiskit.providers.fake_provider import GenericBackendV2
 from qiskit.exceptions import QiskitError
@@ -261,6 +269,15 @@ class TestVersionArg(QpyCircuitTestCase):
         qc = QuantumCircuit(2)
         with self.assertRaises(ValueError):
             dump(qc, io.BytesIO(), version=3)
+
+    def test_reject_oversized_global_phase(self):
+        """Test that a global phase too large for QPY raises instead of writing a corrupt file."""
+        qc = QuantumCircuit(1)
+        qc.global_phase = sum(ParameterVector("p", 2000), 0.5)
+        for version in (QPY_COMPATIBILITY_VERSION, QPY_VERSION):
+            with self.subTest(version=version):
+                with io.BytesIO() as fptr, self.assertRaisesRegex(QpyError, "global phase"):
+                    dump(qc, fptr, version=version)
 
     def test_compatibility_version_roundtrip(self):
         """Test the version is set correctly when specified."""
